@@ -64,6 +64,9 @@ pip install -r requirements.txt
 # 实时选股（自动判断大盘）
 python live_scan.py
 
+# 实时追踪（8只最佳买点每日报告，下午4点自动发QQ）
+python track_signals.py
+
 # 全量回测验证
 python validate_v3.py
 ```
