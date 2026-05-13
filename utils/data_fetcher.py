@@ -116,3 +116,71 @@ def get_stock_list_market_cap():
     if os.path.exists(csv_path):
         return pd.read_csv(csv_path, dtype={'代码': str})
     return pd.DataFrame(columns=['代码', '名称', '总市值'])
+
+
+def fetch_index_history(index_code: str, days: int = 300) -> pd.DataFrame or None:
+    """
+    拉取指数历史数据（上证指数 000001 / 创业板指 399006）
+    保存到 data/stocks/{index_code}.csv
+    """
+    ensure_dir()
+
+    # 腾讯指数前缀
+    if index_code == '000001':
+        prefix = 'sh000001'
+    elif index_code == '399006':
+        prefix = 'sz399006'
+    else:
+        return None
+
+    url = (f"https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"
+           f"?_var=kline_dayhfq&param={prefix},day,,,{days},qfq")
+    try:
+        r = requests.get(url, proxies=PROXY, timeout=10)
+        if r.status_code != 200:
+            return None
+        text = r.text
+        json_str = text[text.index('=') + 1:]
+        data = json.loads(json_str)
+        index_data = data.get('data', {}).get(prefix, {})
+        rows = index_data.get('day') or index_data.get('qfqday') or []
+
+        if not rows:
+            return None
+
+        result = []
+        for row in rows:
+            if len(row) < 6:
+                continue
+            try:
+                result.append({
+                    '日期': row[0],
+                    '开盘': float(row[1]),
+                    '收盘': float(row[2]),
+                    '最高': float(row[3]),
+                    '最低': float(row[4]),
+                    '成交量': float(row[5]),
+                    '成交额': 0.0,
+                    '涨跌幅': 0.0,
+                })
+            except:
+                pass
+
+        if len(result) < 60:
+            return None
+
+        df = pd.DataFrame(result)
+        for col in ['开盘', '收盘', '最高', '最低', '成交量', '成交额']:
+            df[col] = pd.to_numeric(df[col], errors='coerce')
+        df['涨跌幅'] = pd.to_numeric(df['涨跌幅'], errors='coerce')
+        df.dropna(subset=['收盘'], inplace=True)
+        df.reset_index(drop=True, inplace=True)
+
+        # 保存缓存
+        file_path = os.path.join(DATA_DIR, f"{index_code}.csv")
+        df.to_csv(file_path, index=False, encoding='utf-8')
+        return df
+
+    except Exception as e:
+        print(f"fetch_index_history error: {e}")
+        return None
