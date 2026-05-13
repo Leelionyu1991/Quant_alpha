@@ -1,0 +1,42 @@
+# 数据缓存（不要提交）
+data/
+
+# Python 缓存
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 日志
+*.log
+output.txt
+
+# 扫描结果（每次运行生成，不提交）
+live_signals.csv
+final_watchlist_v3.csv
+results.csv
+results_backup.csv
+results_clean.csv
+scored_results.csv
+scored_v2.csv
+final_signals_v3.csv
+final_watchlist_v3.csv
+backtest_results.csv
+backtest_v3.csv
+pattern_analysis.csv
+pattern_analysis_v2.csv
+monitor_status.txt
+
+# 信号目录
+signals/
+
+# 临时文件
+*.tmp
+*.bak
