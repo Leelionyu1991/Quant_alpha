@@ -11,25 +11,45 @@ VCB 形态三阶段：
 
 回踩确认后买入，等待二次拉升。
 
+## 大盘趋势过滤
+
+选股前自动判断大盘状态（基于上证指数 + 创业板指 MA60 状态）：
+
+| 大盘趋势 | 调整规则 | 说明 |
+|---|---|---|
+| 强势上涨 | 评分不变 | VCB 信号完整有效 |
+| 上涨 | ×0.95 | 轻微下调 |
+| 中性 | ×0.85，浅回踩更严格 | 谨慎参与 |
+| 下跌 | ×0.6，浅回踩直接过滤 | 熊市不参与 |
+
+趋势判断依据：
+- 指数是否在 MA60 上方
+- MA60 斜率（方向和陡峭程度）
+- MA20/MA60 多头排列
+- 近 5/10/20 日收益率
+
 ## 评分公式
 
 ```
-最终分 = 资金分 × 0.7 + 形态分 × 0.2 + 情绪分 × 0.1
+最终分 = (资金分 × 0.7 + 形态分 × 0.2 + 情绪分 × 0.1) × 大盘趋势系数
 ```
 
 ## 目录结构
 
 ```
 quant_alpha/
-├── run_screener.py      # 选股扫描（主脚本）
-├── live_scan.py         # 实时选股（当前满足条件的股票）
-├── validate_v3.py       # 全量回测验证
-├── run_backtest.py      # 回测框架
-├── strategies/           # 策略模块
+├── live_scan.py              # 实时选股（含大盘趋势自动判断）
+├── validate_v3.py            # 全量回测验证
+├── run_screener.py           # 扫描框架
+├── run_backtest.py           # 回测框架
+├── analyze_results.py        # 结果分析
+├── filter_live.py           # 实时信号筛选
+├── strategies/
 │   └── merged_strategy.py
-├── utils/               # 工具模块
-│   └── data_fetcher.py
-└── data/                # 股票数据缓存（gitignore）
+├── utils/
+│   ├── data_fetcher.py
+│   └── market_trend.py      # 大盘趋势判断
+└── data/                     # 股票数据缓存（gitignore）
 ```
 
 ## 安装依赖
@@ -40,21 +60,11 @@ pip install -r requirements.txt
 
 ## 快速开始
 
-### 1. 扫描全量股票
-
 ```bash
-python run_screener.py
-```
-
-### 2. 实时选股（找当前可买入的）
-
-```bash
+# 实时选股（自动判断大盘）
 python live_scan.py
-```
 
-### 3. 全量回测验证
-
-```bash
+# 全量回测验证
 python validate_v3.py
 ```
 
@@ -68,14 +78,9 @@ python validate_v3.py
 
 详见 [STRATEGY_v3.md](STRATEGY_v3.md)
 
-## 数据说明
-
-- 股票列表：`stock_list_clean.csv`
-- 数据缓存：`data/stocks/*.csv`（每文件一行代码，自动从腾讯/Sina API 获取）
-- 数据格式：日期，开盘，收盘，最高，最低，成交量
-
 ## 注意事项
 
 - 本工具仅供研究参考，不构成投资建议
 - 实盘请自行做好风险控制（建议止损 -8%）
 - 回测结果不代表未来收益
+- 大盘趋势判断依赖指数数据，需确保 data/stocks/ 下有 000001 和 399006 的缓存数据

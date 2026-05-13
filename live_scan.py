@@ -3,6 +3,8 @@ quant_alpha v3.0 实时选股
 找当前正在回踩、布林中轨附近的股票
 """
 import os, sys, time, warnings, pandas as pd, numpy as np
+sys.path.insert(0, os.path.dirname(__file__))
+from utils.market_trend import get_market_trend, trend_adjust, format_trend_summary, INDEX_CODE_SH, INDEX_CODE_CYB
 warnings.filterwarnings('ignore')
 
 DATA_DIR = r'C:\Users\Razer\Desktop\quant_alpha\data\stocks'
@@ -196,12 +198,40 @@ def analyze_stock(code, name):
     # 返回最佳信号
     return max(results, key=lambda x: x['final_score'])
 
+def load_index_data():
+    """加载指数数据"""
+    indices = {}
+    for code in [INDEX_CODE_SH, INDEX_CODE_CYB]:
+        fp = os.path.join(DATA_DIR, f'{code}.csv')
+        if os.path.exists(fp):
+            try:
+                df = pd.read_csv(fp, encoding='utf-8', on_bad_lines='skip')
+                cm = {'日期':'date','收盘':'close','最高':'high','最低':'low','成交量':'vol','开盘':'open'}
+                df.rename(columns={k:v for k,v in cm.items() if k in df.columns}, inplace=True)
+                if 'close' in df.columns:
+                    df['close'] = pd.to_numeric(df['close'], errors='coerce')
+                    df.dropna(subset=['close'], inplace=True)
+                    df.reset_index(drop=True, inplace=True)
+                    indices[code] = df
+            except:
+                pass
+    return indices
+
+
 def main():
     t0 = time.time()
     print('============================================================')
     print('  quant_alpha v3.0 实时选股')
     print(f'  {time.strftime("%Y-%m-%d %H:%M:%S")}')
     print('============================================================')
+
+    # 加载指数数据
+    print('正在获取大盘趋势...')
+    index_df = load_index_data()
+    market = get_market_trend(DATA_DIR, index_df)
+    trend_summary = format_trend_summary(market)
+    print(f'  {trend_summary}')
+    print()
 
     df_list = pd.read_csv(LIST_FILE, encoding='utf-8')
     # 检测列名
@@ -241,10 +271,22 @@ def main():
 
     sig_df = pd.DataFrame(signals)
 
+    # 应用市场趋势调整
+    trend_str = market['trend']
+    sig_df['trend_adjusted'] = sig_df.apply(
+        lambda r: trend_adjust(market, r['final_score'], r['pullback_pct']), axis=1
+    )
+
+    # 趋势差时提示过滤
+    if trend_str == 'down':
+        sig_df = sig_df[sig_df['trend_adjusted'] > 0]
+        print(f'  [警告] 大盘趋势下跌，仅展示调整后评分>0的信号')
+        print()
+
     # 优先推荐：回踩完成或接近完成（当前价贴近布林中轨）
     # 且回踩后涨幅不大（还没大涨）
     sig_df['rec_score'] = (
-        sig_df['final_score'] * 0.4 +
+        sig_df['trend_adjusted'] * 0.4 +
         (100 - sig_df['cur_bb_dist'] * 10) * 0.3 +
         (30 - sig_df['cur_from_pb'].clip(0, 30)) * 0.3
     )
@@ -252,11 +294,11 @@ def main():
     sig_df = sig_df.sort_values('rec_score', ascending=False)
 
     print('推荐买入（按综合评分排序）：')
-    print(f'{"代码":<8} {"名称":<10} {"评分":<6} {"回踩深度":<8} {"当前偏离BB":<10} {"回踩后涨幅":<10} {"距回踩天数":<10}')
-    print('-' * 80)
+    print(f'{"代码":<8} {"名称":<10} {"评分":<6} {"调整分":<7} {"回踩深度":<8} {"当前偏离BB":<10} {"回踩后涨幅":<10} {"距回踩天数":<10}')
+    print('-' * 95)
     for _, r in sig_df.iterrows():
         print(f'{r["code"]:<8} {r["name"]:<10} {r["final_score"]:<6.1f} '
-              f'{r["pullback_pct"]:<7.1f}% {r["cur_bb_dist"]:<9.1f}% '
+              f'{r["trend_adjusted"]:<6.1f}  {r["pullback_pct"]:<7.1f}% {r["cur_bb_dist"]:<9.1f}% '
               f'{r["cur_from_pb"]:>+8.1f}% {r["days_since_pb"]:>6}天')
 
     sig_df.to_csv(OUTPUT, index=False, encoding='utf-8-sig')
